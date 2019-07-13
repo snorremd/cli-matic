@@ -17,6 +17,21 @@
   [var]
   (System/getenv var))
 
+(defn read-interactive
+  "Reads value from tty.
+  If masked? is true masks user input with *"
+  [{:keys [prompt masked?]}]
+  (let [console (System/console)]
+    (print prompt)
+    (flush)
+    (if masked?
+      (apply str (.readPassword console))
+      (read-line))))
+
+(defn tty?
+  []
+  (some? (System/console)))
+
 (defn exit-script
   "Terminates execution with a return value."
   [retval]

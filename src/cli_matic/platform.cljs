@@ -9,6 +9,7 @@
   "
   (:require [planck.core :as plk]
             [planck.environ :as plkenv]
+            [planck.io :as plkio]
             [cljs.reader :as csrdr]
             [clojure.string :as str]))
 
@@ -18,6 +19,21 @@
   [var]
   (let [kw (keyword (str/lower-case var))]
     (get plkenv/env kw nil)))
+
+
+(defn read-interactive
+  "Reads value from tty.
+  If masked? is true masks user input with *"
+  [masked?]
+  (if masked?
+    (plk/read-password)
+    (plk/read-line)))
+
+(defn tty?
+  []
+  (and (plkio/tty? plk/*in*)
+       (plkio/tty? plk/*out*)))
+
 
 (defn exit-script
   "Terminates execution with a return value.

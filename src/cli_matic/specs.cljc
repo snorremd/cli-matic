@@ -72,11 +72,18 @@
 
 (s/def ::env ::existing-string)
 
+(s/def ::masked? boolean?)
+
+(s/def ::prompt string?)
+
+(s/def ::interactive
+  (s/keys :req-opt [::masked? ::prompt]))
+
 (s/def ::spec some?) ; \TODO how do we know it's a valid spec?
 
 (s/def ::climatic-option
   (s/keys :req-un [::option  ::as  ::type]
-          :opt-un [::short ::default ::env ::spec]))
+          :opt-un [::short ::default ::env ::spec ::interactive]))
 
 ;; CLI-matic configuration
 (s/def ::description (s/or :a-string ::existing-string

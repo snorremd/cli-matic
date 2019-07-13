@@ -135,6 +135,26 @@
   :args (s/cat :parms ::S/mapOfCliParams)
   :ret (s/coll-of string?))
 
+
+(defn default-prompt
+  [option]
+  (update-in option
+             [:interactive :prompt]
+             #(if (nil? %)
+                (str (:as option) " ("
+                  (:option option)
+                  (when (:default option)
+                    ", default: "
+                    (:default option))
+                  "): ")
+                %)))
+
+
+(defn map-keys
+  ""
+  [options f]
+  (into {} (map (fn [opt] [(:option opt) (f opt)]) options)))
+
 (defn parse-cmds-with-defaults
   "Parses a command line with environment defaults.
 
@@ -150,27 +170,29 @@
 
   "
 
-  [cmt-options argv in-order? fn-env]
+  [cmt-options argv in-order? fn-env fn-int]
   (let [cli-cmd-options (U/cm-opts->cli-opts cmt-options)
         env-options (filter :env cmt-options)
-        argv+ (if (not (empty? env-options))
-                ;; I have env variables
-                (let [parse1 (parse-opts argv cli-cmd-options
-                                         :in-order in-order?
-                                         ::no-defaults true)
-                      set-keys-in (set (keys (:options parse1)))
-                      missing-cmt-options (filter (complement set-keys-in) env-options)
-                      map-missing-keys (into {}
-                                             (map
-                                              (fn [{:keys [option env]}]
-                                                [option (fn-env env)])
-                                              missing-cmt-options))]
-                  (into (mk-fake-args map-missing-keys) argv))
-
-                ;; no env variables - we are good
-                argv)]
-
-    (parse-opts argv+ cli-cmd-options :in-order in-order?)))
+        interactive-options (if (P/tty?) (filter :interactive cmt-options) [])
+        parsed-opts (parse-opts argv cli-cmd-options
+                                :in-order in-order?
+                                ::no-defaults true)
+        ;;_ (clojure.pprint/pprint parsed-opts)
+        parsed-interactive (-> (keys (:options parsed-opts))
+                               set
+                               complement
+                               (filter (->> interactive-options
+                                            (map #(assoc % :option (keyword (:option %))))))
+                               (map-keys (comp fn-int :interactive)))
+        parsed-env (-> (keys (merge (:options parsed-opts)
+                                    parsed-interactive))
+                       set
+                       complement
+                       (filter env-options)
+                       (map-keys (comp fn-env :env)))
+        argv+ (mk-fake-args (merge parsed-interactive parsed-env))]
+    (-> (concat argv+ argv)
+        (parse-opts cli-cmd-options :in-order in-order?))))
 
 (s/fdef
   parse-cmds-with-defaults
@@ -195,7 +217,7 @@
   "
   [config canonical-subcommand subcommand-parms]
   (let [cmt-options (U/get-options-for config canonical-subcommand)
-        parsed-cmd-opts (parse-cmds-with-defaults cmt-options subcommand-parms false P/read-env)
+        parsed-cmd-opts (parse-cmds-with-defaults cmt-options subcommand-parms false P/read-env P/read-interactive)
         cmd-args (:arguments parsed-cmd-opts)
 
         ;; capture positional parms
@@ -207,7 +229,7 @@
       (pos? (count positional-parms))
       (let [addl-args (mk-fake-args positional-parms)
             newcmdline (into subcommand-parms addl-args)]
-        (parse-cmds-with-defaults cmt-options newcmdline false P/read-env))
+        (parse-cmds-with-defaults cmt-options newcmdline false P/read-env P/read-interactive))
 
       :else
       parsed-cmd-opts)))
@@ -335,7 +357,7 @@
 
   (let [gl-options (U/get-options-for config nil)
         ;_ (prn "Cmdline" cmdline)
-        parsed-gl-opts (parse-cmds-with-defaults gl-options argv true P/read-env) ;(parse-opts cmdline cli-gl-options :in-order true)
+        parsed-gl-opts (parse-cmds-with-defaults gl-options argv true P/read-env P/read-interactive) ;(parse-opts cmdline cli-gl-options :in-order true)
         missing-gl-opts (errors-for-missing-mandatory-args
                          (U/get-options-for config nil)
                          parsed-gl-opts {})
@@ -406,6 +428,7 @@
   :args (s/cat :args (s/coll-of string?)
                :opts ::S/climatic-cfg)
   :ret ::S/lineParseResult)
+
 
 (defn assert-unique-values
   "Check that all values are unique.
